@@ -4,14 +4,14 @@ import time
 
 
 def get_windows():
-    try:        result = subprocess.run(
+    try:
+        result = subprocess.run(
             ["wmctrl", "-l"],
             capture_output=True,
             text=True,
             check=True
         )
-        return result.stdout.strip()
-    except FileNotFoundError:
+        return result.stdout.strip()    except FileNotFoundError:
         return "wmctrl is not installed.\n\nTry:\nsudo apt install wmctrl"
     except subprocess.CalledProcessError as e:
         return f"Could not inspect windows:\n{e}"
