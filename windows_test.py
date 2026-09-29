@@ -1,12 +1,11 @@
-```python
+python
 import tkinter as tk
 import subprocess
 import time
 
 
 def get_windows():
-    try:
-        result = subprocess.run(
+    try:        result = subprocess.run(
             ["wmctrl", "-l"],
             capture_output=True,
             text=True,
