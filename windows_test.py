@@ -1,4 +1,3 @@
-python
 import tkinter as tk
 import subprocess
 import time
@@ -43,4 +42,3 @@ text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 refresh()
 
 root.mainloop()
-```
