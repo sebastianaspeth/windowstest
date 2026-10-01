@@ -6,17 +6,19 @@ import zipfile
 import tempfile
 import shutil
 
+
 class APKLauncher:
     def __init__(self, root):
         self.root = root
         self.root.title("APK / XAPK Launcher")
         self.root.geometry("600x450")
 
-        tk.Label(
+        title = tk.Label(
             root,
             text="APK / XAPK Launcher",
             font=("Arial", 20)
-        ).pack(pady=20)
+        )
+        title.pack(pady=20)
 
         self.status = tk.Label(
             root,
@@ -25,15 +27,20 @@ class APKLauncher:
         )
         self.status.pack(pady=10)
 
-        tk.Button(
+        self.choose_button = tk.Button(
             root,
             text="Choose APK / XAPK",
             command=self.choose_file,
             width=25,
             height=2
-        ).pack(pady=20)
+        )
+        self.choose_button.pack(pady=20)
 
-        self.output = tk.Text(root, height=12, width=70)
+        self.output = tk.Text(
+            root,
+            height=12,
+            width=70
+        )
         self.output.pack(
             padx=20,
             pady=10,
@@ -41,23 +48,32 @@ class APKLauncher:
             expand=True
         )
 
-    def log(self, message):
-        self.output.insert(tk.END, message + "\n")
+    def log(self, text):
+        self.output.insert(tk.END, text + "\n")
         self.output.see(tk.END)
         self.root.update_idletasks()
 
     def run_adb(self, args):
         try:
-            return subprocess.run(
+            result = subprocess.run(
                 ["adb"] + args,
                 capture_output=True,
                 text=True
             )
+
+            if result.stdout:
+                self.log(result.stdout.strip())
+
+            if result.stderr:
+                self.log(result.stderr.strip())
+
+            return result
+
         except FileNotFoundError:
             self.log("ERROR: adb was not found.")
             messagebox.showerror(
                 "ADB not found",
-                "Install ADB and make sure it is in PATH."
+                "ADB is not installed or is not in PATH."
             )
             return None
 
@@ -67,24 +83,22 @@ class APKLauncher:
         if result is None:
             return False
 
-        if result.stdout:
-            self.log(result.stdout.strip())
+        lines = result.stdout.strip().splitlines()
 
-        if result.stderr:
-            self.log(result.stderr.strip())
-
-        devices = []
-        for line in result.stdout.splitlines()[1:]:
-            if "\tdevice" in line:
-                devices.append(line)
+        devices = [
+            line for line in lines[1:]
+            if line.strip() and "\tdevice" in line
+        ]
 
         if not devices:
+            self.log("No Android device is connected.")
             messagebox.showerror(
                 "No Android device",
-                "No Android device is connected through ADB."
+                "No Android device was found through ADB."
             )
             return False
 
+        self.log("Android device detected.")
         return True
 
     def choose_file(self):
@@ -101,10 +115,11 @@ class APKLauncher:
         if not path:
             return
 
-        self.output.delete("1.0", tk.END)
         self.status.config(
             text="Selected: " + os.path.basename(path)
         )
+
+        self.output.delete("1.0", tk.END)
 
         if not self.check_device():
             return
@@ -113,8 +128,10 @@ class APKLauncher:
 
         if extension == ".apk":
             self.install_apk(path)
+
         elif extension == ".xapk":
             self.install_xapk(path)
+
         else:
             messagebox.showerror(
                 "Unsupported file",
@@ -125,48 +142,59 @@ class APKLauncher:
         self.log("Installing APK...")
         self.log(path)
 
-        result = self.run_adb(["install", "-r", path])
+        result = self.run_adb([
+            "install",
+            "-r",
+            path
+        ])
 
         if result is None:
             return
 
-        if result.stdout:
-            self.log(result.stdout.strip())
-
-        if result.stderr:
-            self.log(result.stderr.strip())
-
         if result.returncode == 0:
-            self.status.config(text="APK installed successfully.")
+            self.log("APK installed successfully.")
+            self.status.config(
+                text="APK installed successfully."
+            )
+
             messagebox.showinfo(
                 "Success",
                 "The APK was installed successfully."
             )
         else:
-            self.status.config(text="APK installation failed.")
+            self.log("APK installation failed.")
+            self.status.config(
+                text="APK installation failed."
+            )
 
     def install_xapk(self, path):
-        self.log("Extracting XAPK...")
+        self.log("Opening XAPK...")
+        self.log(path)
 
-        temp_dir = tempfile.mkdtemp(prefix="xapk_")
+        temp_dir = tempfile.mkdtemp(
+            prefix="xapk_"
+        )
 
         try:
             with zipfile.ZipFile(path, "r") as archive:
                 archive.extractall(temp_dir)
 
+            self.log("XAPK extracted.")
+
             apk_files = []
 
-            for current_root, dirs, files in os.walk(temp_dir):
+            for root_dir, dirs, files in os.walk(temp_dir):
                 for filename in files:
                     if filename.lower().endswith(".apk"):
                         apk_files.append(
-                            os.path.join(current_root, filename)
+                            os.path.join(root_dir, filename)
                         )
 
             if not apk_files:
+                self.log("No APK files were found inside the XAPK.")
                 messagebox.showerror(
                     "Invalid XAPK",
-                    "No APK files were found inside the XAPK."
+                    "The XAPK did not contain any APK files."
                 )
                 return
 
@@ -178,7 +206,8 @@ class APKLauncher:
                 self.install_apk(apk_files[0])
                 return
 
-            self.log("Installing split APK package...")
+            self.log("Multiple APK files detected.")
+            self.log("Attempting split APK installation...")
 
             result = self.run_adb(
                 ["install-multiple", "-r"] + apk_files
@@ -187,37 +216,55 @@ class APKLauncher:
             if result is None:
                 return
 
-            if result.stdout:
-                self.log(result.stdout.strip())
-
-            if result.stderr:
-                self.log(result.stderr.strip())
-
             if result.returncode == 0:
+                self.log(
+                    "XAPK installed successfully."
+                )
+
                 self.status.config(
                     text="XAPK installed successfully."
                 )
+
                 messagebox.showinfo(
                     "Success",
                     "The XAPK was installed successfully."
                 )
             else:
+                self.log(
+                    "XAPK installation failed."
+                )
+
                 self.status.config(
                     text="XAPK installation failed."
                 )
 
         except zipfile.BadZipFile:
+            self.log("The XAPK is not a valid ZIP archive.")
+
             messagebox.showerror(
                 "Invalid XAPK",
-                "The selected XAPK is not a valid ZIP archive."
+                "The selected XAPK file is invalid or corrupted."
             )
+
         except Exception as error:
-            self.log("Error: " + str(error))
-            messagebox.showerror("Error", str(error))
+            self.log(
+                "Error: " + str(error)
+            )
+
+            messagebox.showerror(
+                "Error",
+                str(error)
+            )
+
         finally:
-            shutil.rmtree(temp_dir, ignore_errors=True)
+            shutil.rmtree(
+                temp_dir,
+                ignore_errors=True
+            )
 
 
 root = tk.Tk()
+
 app = APKLauncher(root)
+
 root.mainloop()
